@@ -1,0 +1,501 @@
+<!doctype html>
+<!--
+  index.html — Realistic & "Aggressive" Sign-in UI (LEGAL / defensive use only)
+  ---------------------------------------------------------------------------
+  WARNING: This file is a frontend-only demo. It MUST be wired to a legitimate
+  backend endpoint (POST /api/auth/login) that performs authentication,
+  rate-limiting, CAPTCHA verification, account lockout, 2FA, logging, and sets
+  secure HttpOnly cookies or issues tokens. Do NOT use this file to phish or
+  capture credentials for accounts you don't own or have permission to test.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Acme — Secure Sign in</title>
+  <meta name="description" content="Acme Sign-in (demo). For authorized/internal use only." />
+  <meta name="csrf-token" content="" />
+
+  <style>
+    /* Modern polished styling */
+    :root{
+      --bg:#0f172a; --panel:#0b1220; --muted:#9aa6bf; --accent:#06b6d4;
+      --danger:#ef4444; --success:#10b981; --glass: rgba(255,255,255,0.03);
+      --radius:14px; --shadow: 0 10px 30px rgba(2,6,23,0.6);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background: linear-gradient(180deg,#071028 0%, #071a2a 100%);color:#e6eef6}
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:36px}
+    .card{width:100%;max-width:1040px;display:grid;grid-template-columns:1fr 420px;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+    /* Left marketing / device details */
+    .left{
+      background: linear-gradient(135deg, rgba(6,182,212,0.06), rgba(79,70,229,0.04));
+      padding:40px 36px; display:flex;flex-direction:column;gap:18px;align-items:flex-start;
+    }
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#7c3aed);display:inline-flex;align-items:center;justify-content:center;font-weight:700;color:#021125}
+    .title{font-size:22px;margin:0}
+    .subtitle{color:var(--muted);margin:0;font-size:13px}
+    .info{margin-top:12px;padding:16px;border-radius:12px;background:var(--glass);width:100%;box-shadow:inset 0 1px 0 rgba(255,255,255,0.02)}
+    .info div{font-size:13px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;margin:6px 0}
+    .danger{color:var(--danger);font-weight:600}
+    .left-footer{margin-top:auto;color:var(--muted);font-size:13px}
+
+    /* Right: login panel */
+    .panel{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:28px 28px;display:flex;flex-direction:column;gap:12px}
+    h1{margin:0;font-size:20px}
+    .lead{color:var(--muted);font-size:13px;margin:0}
+    form{display:flex;flex-direction:column;gap:12px;margin-top:6px}
+    label{font-size:13px;color:var(--muted)}
+    input[type="email"], input[type="password"]{
+      width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);
+      background:transparent;color:inherit;font-size:14px;
+    }
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .checkbox{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:13px}
+    button.primary{
+      background:linear-gradient(90deg,var(--accent),#7c3aed);border:0;padding:12px;border-radius:10px;color:#021125;font-weight:700;cursor:pointer;
+    }
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);padding:10px;border-radius:10px;color:var(--muted);cursor:pointer}
+    .small{font-size:12px;color:var(--muted)}
+    .muted{color:var(--muted)}
+    .error{color:var(--danger);font-size:13px}
+    .ok{color:var(--success);font-size:13px}
+    .divider{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.02),transparent);margin:10px 0;border-radius:4px}
+
+    /* password strength bar */
+    .pw-meter{height:8px;border-radius:6px;background:rgba(255,255,255,0.03);overflow:hidden}
+    .pw-meter > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#ef4444,#f97316,#a3e635,#10b981);transition:width .25s ease}
+
+    /* failed attempts box */
+    .attempts{display:flex;gap:8px;align-items:center;font-size:13px}
+    .badge{background:rgba(255,255,255,0.03);padding:6px 8px;border-radius:8px;font-weight:700;color:var(--muted)}
+    .lockout{background:rgba(239,68,68,0.08);padding:10px;border-radius:8px;color:var(--danger);font-weight:700}
+
+    /* small screens */
+    @media (max-width:980px){
+      .card{grid-template-columns:1fr}
+      .left{order:2;padding:24px}
+      .panel{order:1}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" role="main" aria-labelledby="signinTitle">
+      <!-- LEFT: Info / device + security warnings -->
+      <aside class="left" aria-label="Account and device information">
+        <div class="brand">
+          <div class="logo" aria-hidden="true">A</div>
+          <div>
+            <h2 class="title">Acme Cloud</h2>
+            <p class="subtitle">Enterprise access | Sensitive operations</p>
+          </div>
+        </div>
+
+        <div class="info" id="deviceInfo" aria-live="polite">
+          <div><span>Device:</span><strong id="deviceName">Unknown</strong></div>
+          <div><span>Location:</span><strong id="deviceLocation">Unknown</strong></div>
+          <div><span>Last successful sign-in:</span><strong id="lastLogin">—</strong></div>
+          <div><span>Risk level:</span><strong id="riskLevel" class="danger">High</strong></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <p class="subtitle">Security controls</p>
+          <ul style="padding-left:18px;margin:6px 0;color:var(--muted);font-size:13px">
+            <li>Progressive rate limiting & lockouts</li>
+            <li>Mandatory 2FA for admin actions</li>
+            <li>Device fingerprinting & geo alerts</li>
+          </ul>
+        </div>
+
+        <div class="left-footer small">
+          <div>This is a demo front-end. Server must evaluate: failed attempts, CAPTCHA, 2FA, and lockouts.</div>
+        </div>
+      </aside>
+
+      <!-- RIGHT: Login panel -->
+      <section class="panel" aria-labelledby="signinTitle">
+        <div>
+          <h1 id="signinTitle">Sign in to Acme</h1>
+          <p class="lead">Enter credentials. Multiple failures will temporarily lock your account.</p>
+        </div>
+
+        <div id="globalMsg" class="muted small" role="status" aria-live="polite"></div>
+
+        <form id="loginForm" novalidate>
+          <div>
+            <label for="email">Work email</label>
+            <input id="email" type="email" name="email" autocomplete="email" inputmode="email" required />
+            <div id="emailError" class="error" aria-live="polite"></div>
+          </div>
+
+          <div>
+            <label for="password">Password</label>
+            <input id="password" type="password" name="password" autocomplete="current-password" required />
+            <div class="pw-meter" aria-hidden="true"><i id="pwFill" style="width:0%"></i></div>
+            <div id="pwHint" class="small muted">Use a strong, unique password (min 12 chars recommended).</div>
+            <div id="passwordError" class="error" aria-live="polite"></div>
+          </div>
+
+          <div class="row">
+            <label class="checkbox"><input id="remember" type="checkbox" /> Remember this device</label>
+            <a class="small muted" href="/forgot-password">Forgot?</a>
+          </div>
+
+          <div class="row" style="align-items:center">
+            <div class="attempts" aria-hidden="false">
+              <div class="badge">Attempts: <span id="attemptCount">0</span></div>
+              <div id="cooldownInfo" class="muted small" style="display:none">Locked for <span id="cooldown">00:00</span></div>
+            </div>
+            <div style="flex:1"></div>
+          </div>
+
+          <button id="submitBtn" class="primary" type="submit">Sign in</button>
+        </form>
+
+        <div class="divider" role="separator" aria-hidden="true"></div>
+
+        <!-- OAuth & Captcha placeholders -->
+        <div style="display:flex;gap:12px">
+          <button id="ssoBtn" class="ghost" type="button">Sign in with SSO</button>
+          <button id="captchaSim" class="ghost" type="button" title="Simulate CAPTCHA (server must verify)">Verify CAPTCHA</button>
+        </div>
+
+        <div id="lockoutBox" style="display:none;margin-top:10px" aria-live="assertive"></div>
+
+        <!-- Simulated 2FA prompt area -->
+        <div id="mfaPanel" style="display:none;margin-top:10px">
+          <div class="small muted">Two-factor required. Enter the 6-digit code sent to your device.</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input id="mfaCode" inputmode="numeric" maxlength="6" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04)" />
+            <button id="mfaSubmit" class="primary" type="button">Verify</button>
+          </div>
+          <div id="mfaMsg" class="small muted" style="margin-top:8px"></div>
+        </div>
+
+        <div style="margin-top:auto;font-size:12px;color:var(--muted)">
+          <div>By signing in you agree to our <a href="/terms" style="color:var(--accent)">Terms</a>.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    /*
+      Notes:
+      - This client simulates aggressive UX and local lockout UI for user feedback only.
+      - The backend must be authoritative: it should implement real attempt-counting, CAPTCHA verification,
+        progressive lockouts, device remember tokens, 2FA, and secure session cookies.
+      - Client-side counters here are for UX and demos only and are stored in sessionStorage.
+    */
+
+    (function(){
+      'use strict';
+
+      // Config (adjust for integration)
+      const API_LOGIN = '/api/auth/login';           // server endpoint (must exist)
+      const API_SSO   = '/auth/sso/start';          // server SSO start
+      const CAPTCHA_PLACEHOLDER = true;             // toggle to show captcha button
+      const MAX_ATTEMPTS = 5;                       // after this, lockout triggers
+      const LOCKOUT_SECONDS = 60 * 2;               // 2 minute lockout (demo)
+      const REQUIRE_MFA = true;                     // demo: server may respond requiring MFA
+
+      // Elements
+      const emailEl = document.getElementById('email');
+      const pwdEl = document.getElementById('password');
+      const form = document.getElementById('loginForm');
+      const submitBtn = document.getElementById('submitBtn');
+      const ssoBtn = document.getElementById('ssoBtn');
+      const captchaBtn = document.getElementById('captchaSim');
+      const attemptCountEl = document.getElementById('attemptCount');
+      const globalMsg = document.getElementById('globalMsg');
+      const emailError = document.getElementById('emailError');
+      const passwordError = document.getElementById('passwordError');
+      const pwFill = document.getElementById('pwFill');
+      const lockoutBox = document.getElementById('lockoutBox');
+      const cooldownInfo = document.getElementById('cooldownInfo');
+      const cooldownEl = document.getElementById('cooldown');
+      const lastLoginEl = document.getElementById('lastLogin');
+      const deviceNameEl = document.getElementById('deviceName');
+      const deviceLocEl = document.getElementById('deviceLocation');
+      const riskEl = document.getElementById('riskLevel');
+      const mfaPanel = document.getElementById('mfaPanel');
+      const mfaCode = document.getElementById('mfaCode');
+      const mfaSubmit = document.getElementById('mfaSubmit');
+      const mfaMsg = document.getElementById('mfaMsg');
+
+      // Demo helpers: device info (simulated)
+      function fingerprintDevice() {
+        const ua = navigator.userAgent;
+        const device = /Mobi/.test(ua) ? 'Mobile Device' : 'Desktop';
+        const loc = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Unknown';
+        deviceNameEl.textContent = device;
+        deviceLocEl.textContent = loc;
+        // last login demo (should come from server)
+        lastLoginEl.textContent = sessionStorage.getItem('acme_last_login') || 'No recent activity';
+        // risk estimation demo
+        riskEl.textContent = sessionStorage.getItem('acme_risk') || 'Moderate';
+      }
+
+      fingerprintDevice();
+
+      // Attempt counter / lockout are stored in sessionStorage (UI only)
+      function getAttempts() {
+        return parseInt(sessionStorage.getItem('acme_attempts') || '0', 10);
+      }
+      function setAttempts(n) {
+        sessionStorage.setItem('acme_attempts', String(n));
+        attemptCountEl.textContent = String(n);
+      }
+      setAttempts(getAttempts());
+
+      // Lockout timer
+      function startLockout(seconds) {
+        const until = Date.now() + seconds * 1000;
+        sessionStorage.setItem('acme_lockout_until', String(until));
+        showLockoutUI(seconds);
+      }
+
+      function showLockoutUI(remaining) {
+        cooldownInfo.style.display = 'inline';
+        lockoutBox.style.display = 'block';
+        lockoutBox.className = 'lockout';
+        lockoutBox.textContent = 'Too many failed attempts — account temporarily locked.';
+        updateCooldown();
+        submitBtn.disabled = true;
+      }
+
+      function updateCooldown() {
+        const until = parseInt(sessionStorage.getItem('acme_lockout_until') || '0', 10);
+        const now = Date.now();
+        if (!until || now >= until) {
+          // lockout expired
+          sessionStorage.removeItem('acme_lockout_until');
+          cooldownInfo.style.display = 'none';
+          lockoutBox.style.display = 'none';
+          submitBtn.disabled = false;
+          setAttempts(0);
+          return;
+        }
+        const ms = until - now;
+        const sec = Math.ceil(ms / 1000);
+        const mm = String(Math.floor(sec / 60)).padStart(2,'0');
+        const ss = String(sec % 60).padStart(2,'0');
+        cooldownEl.textContent = `${mm}:${ss}`;
+        // schedule next update
+        setTimeout(updateCooldown, 1000);
+      }
+
+      // If there is an active lockout on load, show it
+      if (parseInt(sessionStorage.getItem('acme_lockout_until') || '0', 10) > Date.now()) {
+        showLockoutUI();
+      }
+
+      // Password strength simple meter
+      function evaluatePasswordStrength(pw) {
+        let score = 0;
+        if (!pw) return 0;
+        if (pw.length >= 8) score += 1;
+        if (pw.length >= 12) score += 1;
+        if (/[A-Z]/.test(pw)) score += 1;
+        if (/[0-9]/.test(pw)) score += 1;
+        if (/[^A-Za-z0-9]/.test(pw)) score += 1;
+        return Math.min(score, 5);
+      }
+      function updatePwMeter() {
+        const s = evaluatePasswordStrength(pwdEl.value);
+        const pct = (s / 5) * 100;
+        pwFill.style.width = pct + '%';
+      }
+      pwdEl.addEventListener('input', updatePwMeter);
+
+      // Simple client validation
+      function clearErrors() {
+        emailError.textContent = '';
+        passwordError.textContent = '';
+        globalMsg.textContent = '';
+      }
+      function validateInputs() {
+        clearErrors();
+        let ok = true;
+        const e = emailEl.value.trim();
+        const p = pwdEl.value;
+        if (!e) { emailError.textContent = 'Email required.'; ok = false; }
+        else if (!/^\S+@\S+\.\S+$/.test(e)) { emailError.textContent = 'Enter a valid email.'; ok = false; }
+        if (!p) { passwordError.textContent = 'Password required.'; ok = false; }
+        return ok;
+      }
+
+      // Handle form submit: UI-only flow that delegates to server endpoint
+      form.addEventListener('submit', async function(ev){
+        ev.preventDefault();
+        clearErrors();
+
+        // check client lockout
+        const lockoutUntil = parseInt(sessionStorage.getItem('acme_lockout_until') || '0', 10);
+        if (lockoutUntil && Date.now() < lockoutUntil) {
+          globalMsg.textContent = 'Account locked — please wait before retrying.';
+          return;
+        }
+
+        if (!validateInputs()) return;
+
+        // show busy
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Verifying…';
+
+        // Build payload for server; DO NOT store password locally beyond this request
+        const payload = {
+          email: emailEl.value.trim(),
+          password: pwdEl.value,
+          remember: document.getElementById('remember').checked,
+          captcha_verified: !!sessionStorage.getItem('acme_captcha_passed') // client-side hint only
+        };
+
+        try {
+          // NOTE: This call must be to a legitimate server that enforces security.
+          const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+          const resp = await fetch(API_LOGIN, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type':'application/json',
+              ...(csrf ? {'X-CSRF-Token': csrf} : {})
+            },
+            body: JSON.stringify(payload)
+          });
+
+          // Example server response handling — real server should return minimal, non-leaking messages.
+          if (resp.status === 200) {
+            const data = await resp.json().catch(()=>({}));
+            // server may indicate MFA required
+            if (data.mfa_required) {
+              // Show MFA panel
+              mfaPanel.style.display = 'block';
+              mfaMsg.textContent = 'A one-time code was sent to your device.';
+              globalMsg.textContent = 'Two-factor required.';
+              // store a temporary session token for MFA (if server issues it)
+              if (data.mfa_token) sessionStorage.setItem('acme_mfa_token', data.mfa_token);
+            } else {
+              // Successful auth: server should set Secure HttpOnly cookie / token
+              sessionStorage.setItem('acme_last_login', new Date().toLocaleString());
+              sessionStorage.setItem('acme_risk', 'Low');
+              setAttempts(0);
+              globalMsg.textContent = 'Login successful — redirecting…';
+              // Redirect to app — server session must be authoritative
+              setTimeout(()=>{ window.location.href = data.redirect || '/dashboard'; }, 900);
+            }
+          } else if (resp.status === 401) {
+            // Unauthorized: increase attempt counter and show message
+            const attempts = getAttempts() + 1;
+            setAttempts(attempts);
+            globalMsg.textContent = 'Invalid credentials.';
+            // If attempts exceed threshold, start lockout UI (server must enforce!)
+            if (attempts >= MAX_ATTEMPTS) {
+              startLockout(LOCKOUT_SECONDS);
+              globalMsg.textContent = 'Too many failed attempts — account temporarily locked.';
+            }
+          } else if (resp.status === 429) {
+            // Too many requests — server-side throttling
+            globalMsg.textContent = 'Too many requests — try again later.';
+          } else {
+            // Generic fallback
+            const txt = await resp.text().catch(()=> '');
+            globalMsg.textContent = txt || 'Login failed — try again.';
+          }
+        } catch (err) {
+          console.error('Network error (client demo):', err);
+          globalMsg.textContent = 'Network error. Check connection.';
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign in';
+          // clear password field client-side to reduce accidental retention
+          pwdEl.value = '';
+          updatePwMeter();
+        }
+      });
+
+      // Simulated CAPTCHA button — server integration required for real CAPTCHA
+      if (captchaBtn) {
+        captchaBtn.style.display = CAPTCHA_PLACEHOLDER ? 'inline-block' : 'none';
+        captchaBtn.addEventListener('click', function(){
+          // Demo: mark captcha passed in sessionStorage for UI flows only
+          sessionStorage.setItem('acme_captcha_passed', '1');
+          globalMsg.textContent = 'CAPTCHA passed (demo). Server must verify in production.';
+        });
+      }
+
+      // SSO button
+      ssoBtn.addEventListener('click', function(){
+        // Redirect to SSO start endpoint; server will handle provider and token exchange
+        window.location.href = API_SSO;
+      });
+
+      // MFA verification demo (in reality server verifies)
+      mfaSubmit.addEventListener('click', async function(){
+        const code = mfaCode.value.trim();
+        if (!/^\d{6}$/.test(code)) {
+          mfaMsg.textContent = 'Enter the 6-digit code.';
+          return;
+        }
+        mfaSubmit.disabled = true;
+        mfaMsg.textContent = 'Verifying…';
+        // Demo POST to /api/auth/mfa-verify — implement on server
+        try {
+          const resp = await fetch('/api/auth/mfa-verify', {
+            method:'POST',
+            credentials:'include',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ mfa_token: sessionStorage.getItem('acme_mfa_token'), code })
+          });
+          if (resp.status === 200) {
+            mfaMsg.textContent = 'Verified — redirecting…';
+            sessionStorage.setItem('acme_last_login', new Date().toLocaleString());
+            setTimeout(()=>{ window.location.href = '/dashboard'; }, 800);
+          } else {
+            mfaMsg.textContent = 'Invalid code.';
+          }
+        } catch (e) {
+          mfaMsg.textContent = 'Network error.';
+        } finally {
+          mfaSubmit.disabled = false;
+        }
+      });
+
+      // device risk simulation: if IP/geolocation is unexpected, increase risk (demo)
+      (function simulateRiskDetection(){
+        // In real deployments, server must calculate risk and inform frontend.
+        // Here we randomly flag high risk for demo purposes (do not rely on client-side detection).
+        if (!sessionStorage.getItem('acme_demo_risk_set')) {
+          if (Math.random() < 0.35) {
+            sessionStorage.setItem('acme_risk', 'High');
+            // show an aggressive message for high risk
+            globalMsg.textContent = 'Unrecognized device or location — additional verification required.';
+          } else {
+            sessionStorage.setItem('acme_risk', 'Low');
+          }
+          sessionStorage.setItem('acme_demo_risk_set', '1');
+        }
+        fingerprintDevice();
+      })();
+
+      // Accessibility: focus management on errors
+      form.addEventListener('invalid', function(e){
+        e.preventDefault();
+        if (!emailEl.validity.valid) emailEl.focus();
+        else pwdEl.focus();
+      }, true);
+
+      // Expose debug helpers in console for authorized testers only
+      window.__acme_demo = {
+        resetAttempts: () => { setAttempts(0); sessionStorage.removeItem('acme_lockout_until'); sessionStorage.removeItem('acme_captcha_passed'); },
+        setAttempts: (n) => setAttempts(n),
+        startLockout: (s) => startLockout(s)
+      };
+
+    })();
+  </script>
+</body>
+</html>
